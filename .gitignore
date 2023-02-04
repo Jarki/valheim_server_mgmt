@@ -250,3 +250,5 @@ samconfig.toml
 .vscode
 .aws-sam
 tests
+
+currentLink.txt

@@ -39,11 +39,11 @@ instance_id = os.environ.get("INSTANCE_ID")
 owner_id = int(os.environ.get("OWNER_ID"))
 
 # TODO:
-# 1. Log who uses the command to a DynamoDB table, ad send it to owner chat
+# 1. Log who uses the command to a DynamoDB table, and send it to owner chat
 # 2. Implement allowed users
 # 3. Implement admin users
-# 4. Figure out names in template (change helloWorld stuff)
-# 5. implement server start-stop, status
+# 4. Figure out names in template (change helloWorld stuff) - DONE
+# 5. implement server start-stop, status - DONE
 
 def lambda_handler(event, context):
     """Sample pure Lambda function
@@ -67,7 +67,7 @@ def lambda_handler(event, context):
         Return doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
     """
     
-    if event["headers"]["X-Api-Key"] != api_key:
+    if event["headers"]["X-Telegram-Bot-Api-Secret-Token"] != api_key:
         return {
             "statusCode": 403,
             "body": "Forbidden"
@@ -77,24 +77,28 @@ def lambda_handler(event, context):
         update = json.loads(event["body"])
         message = update["message"]
         
-        if message["from"]["id"] != owner_id:
-            return {
-                "statusCode": 403,
-                "body": "Forbidden"
-            }
+        # if message["from"]["id"] != owner_id:
+        #     return {
+        #         "statusCode": 403,
+        #         "body": "Forbidden"
+        #     }
         
         bot = Bot(token, api_key)
         
         def start_server(chat_id, message):
             try:
-                bot.send_message(chat_id, f"Starting server")
-                aws_utils.start_instance(region, instance_id)
+                if aws_utils.get_instance_status(region, instance_id).lower() == 'running':
+                    public_ip = aws_utils.get_public_ip(region, instance_id)
+                    bot.send_message(owner_id, f"Server is already running\\!\n" + 
+                                    f"Use this IP to connect:\n||{utils.escape_string(public_ip)}||")
+                    return
                 
-                bot.send_message(chat_id, f"Instance started, starting Valheim dedicated server")
-                aws_utils.start_valheim_server(region, instance_id)
+                bot.send_message(chat_id, f"Starting server")
                 
                 public_ip = aws_utils.get_public_ip(region, instance_id)
-                bot.send_message(chat_id, f"Server started\\!\nUse this IP to connect:\n||{utils.escape_string(public_ip)}||")
+                bot.send_message(chat_id, f"Instance started, starting Valheim dedicated server\nYou will be able to connect shortly\n" +
+                                f"Use this IP to connect:\n||{utils.escape_string(public_ip)}||")
+                aws_utils.start_valheim_server(region, instance_id)
                 
                 # Notify the owner
                 if chat_id != owner_id:
@@ -108,9 +112,13 @@ def lambda_handler(event, context):
             
         def stop_server(chat_id, message):
             try:
-                bot.send_message(chat_id, "Stopping server\\.")
+                if aws_utils.get_instance_status(region, instance_id).lower() == 'stopped':
+                    bot.send_message(owner_id, f"Server is not running\\!\n")
+                    return
+                
+                bot.send_message(chat_id, "Stopping server")
                 aws_utils.stop_instance(region, instance_id)
-                bot.send_message(chat_id, "Server stopped\\.")
+                bot.send_message(chat_id, "Server stopped")
                 
                 # Notify the owner
                 if chat_id != owner_id:
@@ -135,8 +143,8 @@ def lambda_handler(event, context):
                     usage = aws_utils.get_instance_usage(region, instance_id)
                     # if one is None, the other one is None too
                     if usage['avg'] is not None:
-                        message = message + f"CPU usage \\(peak\\): {utils.escape_string(str(round(usage['avg'], 3)))}%\n"
-                        message = message + f"CPU usage \\(average\\): {utils.escape_string(str(round(usage['max'], 3)))}%\n"
+                        message = message + f"CPU usage \\(peak\\): {utils.escape_string(str(round(usage['max'], 3)))}%\n"
+                        message = message + f"CPU usage \\(average\\): {utils.escape_string(str(round(usage['avg'], 3)))}%\n"
                 
                 bot.send_message(chat_id, message)
             except ClientError as e:

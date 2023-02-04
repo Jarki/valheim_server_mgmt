@@ -61,23 +61,3 @@ def get_instance_usage(region, iid):
         "avg": cpu_utilization["Datapoints"][0]["Average"] if len(cpu_utilization["Datapoints"]) > 0 else None,
         "max": cpu_utilization["Datapoints"][0]["Maximum"] if len(cpu_utilization["Datapoints"]) > 0 else None,
     }
-    
-def start_valheim_server(region, iid):
-    # Connect to SSM in the specified region
-    ssm = boto3.client("ssm", region_name=region)
-
-    # Run the command on the instance
-    response = ssm.send_command(
-        InstanceIds=[iid],
-        DocumentName="AWS-RunShellScript",
-        Parameters={"commands": ['cd Steam & ./my_start_server.sh']}
-    )
-    
-    # Get the command ID from the response
-    command_id = response["Command"]["CommandId"]
-    
-    # Wait for the command to complete
-    waiter = ssm.get_waiter("command_invoked")
-    waiter.wait(CommandId=command_id)
-    
-    return True

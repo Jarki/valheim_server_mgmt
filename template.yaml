@@ -36,8 +36,8 @@ Resources:
           Properties:
             Path: /message
             Method: post
-            Auth:
-              ApiKeyRequired: true
+      Policies:
+        - AmazonEC2FullAccess
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
