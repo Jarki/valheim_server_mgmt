@@ -9,7 +9,6 @@ import utils
 from botocore.exceptions import ClientError
 
 
-
 class Bot:
     def __init__(self, token, api_key) -> None:
         self.token = token
@@ -34,7 +33,7 @@ class Bot:
         self.message_handlers[command] = callback
         
     def handle_message(self, chat_id, message):
-        logging.info('Handling message from %s (Message: %s)', message["from"]["username"], message["text"])
+        logging.info('Handling message from %s (Message: %s, msg_id: %s)', message["from"]["username"], message["text"], str(message["message_id"]))
 
         if self.update_handled:
             logging.info('Update has already been handled')
@@ -59,11 +58,24 @@ DEV = int(os.environ.get("DEV"))
 # 1. Log who uses the command to a DynamoDB table, and send it to owner chat
 # 2. Implement allowed users
 # 3. Implement admin users
+# Improve handling of different possible server statuses
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
+    if not "headers" in event:
+        return {
+            "statusCode": 400,
+            "body": "Wrong headers"
+        }
+    
+    if not "X-Telegram-Bot-Api-Secret-Token" in event["headers"]:
+        return {
+            "statusCode": 400,
+            "body": "Wrong headers"
+        }
+    
     if event["headers"]["X-Telegram-Bot-Api-Secret-Token"] != api_key:
         logging.info("Received an api key that ends with %s", event["headers"]["X-Telegram-Bot-Api-Secret-Token"][-4:])
         logging.info("True key ends with %s", api_key[-4:])
@@ -86,7 +98,7 @@ def lambda_handler(event, context):
         
         def start_server(chat_id, message):
             try:
-                logging.info("Starting server")
+                logging.debug("Starting server")
                 bot.send_message(chat_id, f"Attempting to start server\\. Please wait")
                 
                 status = aws_utils.get_instance_status(region, instance_id).lower()
@@ -130,12 +142,13 @@ def lambda_handler(event, context):
             
         def stop_server(chat_id, message):
             try:
-                logging.info("Stopping server")
+                logging.debug("Stopping server")
                 
                 bot.send_message(chat_id, "Stopping server")
                 
                 if aws_utils.get_instance_status(region, instance_id).lower() == 'stopped':
                     bot.send_message(chat_id, f"Server is not running\\!\n")
+                    logging.info("Server can not be stopped")
                     return
                 
                 aws_utils.stop_instance(region, instance_id)
@@ -153,7 +166,7 @@ def lambda_handler(event, context):
             
         def get_server_status(chat_id, message):
             try:
-                logging.info("Retrieving server status")
+                logging.debug("Retrieving server status")
                 
                 status = aws_utils.get_instance_status(region, instance_id)
                 
@@ -164,7 +177,7 @@ def lambda_handler(event, context):
                     message = message + f"Use ||{utils.escape_string(public_ip)}|| to connect\n"
                 
                 if status == 'running':
-                    logging.info("The server is running, retrieving CPU data")
+                    logging.debug("The server is running, retrieving CPU data")
                     
                     public_ip = aws_utils.get_public_ip(region, instance_id)
                     message = message + f"Use ||{utils.escape_string(public_ip)}|| to connect\n"

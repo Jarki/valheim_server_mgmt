@@ -13,6 +13,33 @@ Globals:
     MemorySize: 128
 
 Resources:
+  ValheimBotApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+    DefinitionBody:
+      swagger: "2.0"
+      paths:
+        /message:
+          post:
+            produces:
+            - application/json
+            responses:
+              '202':
+                description: "Accepted"
+                schema:
+                  type: object
+            x-amazon-apigateway-integration:
+              type: AWS
+              uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ValheimBotFunction.Arn}/invocations
+              httpMethod: POST
+              responses:
+                default:
+                  statusCode: 200
+              requestParameters:
+                integration.request.header.X-Amz-Invocation-Type: "'Event'"
+              passthroughBehavior : when_no_match
+
   ValheimBotFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -36,16 +63,15 @@ Resources:
           Properties:
             Path: /message
             Method: post
+            RestApiId:
+              Ref: ValheimBotApi
       Policies:
         - AmazonEC2FullAccess
 
 Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
   ValheimBotApi:
     Description: "API Gateway endpoint URL for Prod stage for Hello World function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+    Value: !Sub "https://${ValheimBotApi}.execute-api.${AWS::Region}.amazonaws.com/prod/message/"
   ValheimBotFunction:
     Description: "Hello World Lambda Function ARN"
     Value: !GetAtt ValheimBotFunction.Arn
